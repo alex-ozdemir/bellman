@@ -225,7 +225,7 @@ where
     S: SourceBuilder<<G as PrimeCurve>::Affine>,
 {
     let skips = &AtomicUsize::new(0);
-    let chunks = &AtomicUsize::new(0);
+    let stds = &AtomicUsize::new(0);
     let zeros = &AtomicUsize::new(0);
     let ones = &AtomicUsize::new(0);
     // Perform this region of the multiexp
@@ -247,7 +247,7 @@ where
         let handle_trivial = chunk == 0;
 
         let mut local_skips = 0;
-        let mut local_chunks = 0;
+        let mut local_stds = 0;
         let mut local_zeros = 0;
         let mut local_ones = 0;
 
@@ -260,21 +260,23 @@ where
                         bases.skip(1)?;
                     }
                     ChunkedExponent::One => {
-                        local_ones += 1;
                         if handle_trivial {
+                            local_ones += 1;
                             acc.add_assign_from_source(&mut bases)?;
                         } else {
+                            local_zeros += 1;
                             bases.skip(1)?;
                         }
                     }
                     ChunkedExponent::Chunks(chunks) => {
-                        local_chunks += 1;
                         let exp = chunks[chunk];
 
                         if exp != 0 {
+                            local_stds += 1;
                             (&mut buckets[(exp - 1) as usize])
                                 .add_assign_from_source(&mut bases)?;
                         } else {
+                            local_zeros += 1;
                             bases.skip(1)?;
                         }
                     }
@@ -286,7 +288,7 @@ where
         skips.fetch_add(local_skips, SeqCst);
         ones.fetch_add(local_ones, SeqCst);
         zeros.fetch_add(local_zeros, SeqCst);
-        chunks.fetch_add(local_chunks, SeqCst);
+        stds.fetch_add(local_stds, SeqCst);
 
         // Summation by parts
         // e.g. 3a + 2b + 1c = a +
@@ -324,17 +326,17 @@ where
         });
 
     let net_inner_loop_iters = 
-        chunks.load(SeqCst) +
+        stds.load(SeqCst) +
         skips.load(SeqCst) +
         zeros.load(SeqCst) +
         ones.load(SeqCst);
-    let pct_chunks = chunks.load(SeqCst) as f64 / net_inner_loop_iters as f64 * 1e2;
+    let pct_chunks = stds.load(SeqCst) as f64 / net_inner_loop_iters as f64 * 1e2;
     let pct_skips = skips.load(SeqCst) as f64 / net_inner_loop_iters as f64 * 1e2;
     let pct_zeros = zeros.load(SeqCst) as f64 / net_inner_loop_iters as f64 * 1e2;
     let pct_ones = ones.load(SeqCst) as f64 / net_inner_loop_iters as f64 * 1e2;
 
     timing_log!(|| format!(
-        "MSM size {:>8}, c {:>2}, buckets {:>6}, inner iters {:>8}, chunks {:>5.1}%, skips {:>5.1}%, zeros {:>5.1}%, ones {:>5.1}%",
+        "MSM size {:>8}, c {:>2}, buckets {:>6}, inner iters {:>8}, stds {:>5.1}%, skips {:>5.1}%, zeros {:>5.1}%, ones {:>5.1}%",
         exponents.len(),
         c,
         (1 << c) - 1,

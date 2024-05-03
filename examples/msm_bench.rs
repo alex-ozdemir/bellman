@@ -4,10 +4,10 @@ use bellman::{
 };
 use bls12_381::{Bls12, Scalar};
 use cpu_time::ProcessTime;
-use ff::Field;
+use ff::PrimeField;
 use group::{Curve, Group};
 use pairing::Engine;
-use rand_core::SeedableRng;
+use rand_core::{RngCore, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -26,12 +26,13 @@ fn main() {
         let v = Arc::new(
             (0..elems)
                 .map(|_| {
-                    let s = Scalar::random(&mut rng);
-                    let mut sbytes = s.to_bytes();
-                    for i in (sbytes.len() - zero_bytes)..sbytes.len() {
-                        sbytes[i] = 0;
+                    let mut buf = <Scalar as PrimeField>::Repr::default();
+                    rng.fill_bytes(&mut buf);
+                    for i in (buf.len() - zero_bytes)..buf.len() {
+                        buf[i] = 0;
                     }
-                    Scalar::from_bytes(&sbytes).unwrap()
+                    let s = Scalar::from_repr_vartime(buf).unwrap();
+                    s
                 })
                 .collect::<Vec<_>>(),
         );
