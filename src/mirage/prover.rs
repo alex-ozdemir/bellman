@@ -19,7 +19,7 @@ use crate::domain::{EvaluationDomain, Scalar};
 use crate::multiexp::{multiexp, DensityTracker, FullDensity};
 
 use crate::multicore::Worker;
-use crate::{start_timer, end_timer};
+use crate::{start_timer, end_timer, timing_log};
 
 fn eval<S: PrimeField>(
     lc: &LinearCombination<S>,
@@ -314,6 +314,7 @@ where
         let mut a = EvaluationDomain::from_coeffs(prover.a)?;
         let mut b = EvaluationDomain::from_coeffs(prover.b)?;
         let mut c = EvaluationDomain::from_coeffs(prover.c)?;
+        timing_log!(|| format!("FFT domain size {}", a.len()));
         a.ifft(&worker);
         a.coset_fft(&worker);
         b.ifft(&worker);

@@ -38,6 +38,7 @@ hex-literal = "0.3"
 rand = "0.8"
 rand_xorshift = "0.3"
 sha2 = "0.10"
+cpu-time = "1"
 
 [features]
 groth16 = ["pairing"]

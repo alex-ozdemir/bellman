@@ -31,6 +31,16 @@ pub struct TimerInfo {
 }
 
 #[macro_export]
+macro_rules! timing_log {
+    ($msg:expr) => {{
+        let msg = $msg();
+        if $crate::trace::on() {
+            $crate::trace::println!("{}", msg);
+        }
+    }};
+}
+
+#[macro_export]
 macro_rules! start_timer {
     ($msg:expr) => {{
         use $crate::trace::{compute_indent, Instant, Ordering, ToString, NUM_INDENT};

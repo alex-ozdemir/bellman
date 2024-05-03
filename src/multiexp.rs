@@ -5,6 +5,8 @@ use group::prime::{PrimeCurve, PrimeCurveAffine};
 use std::io;
 use std::iter;
 use std::ops::AddAssign;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering::SeqCst;
 use std::sync::Arc;
 
 #[cfg(feature = "multicore")]
@@ -12,6 +14,8 @@ use rayon::prelude::*;
 
 #[cfg(not(feature = "multicore"))]
 use crate::multicore::FakeParallelIterator;
+
+use crate::timing_log;
 
 use super::SynthesisError;
 
@@ -220,6 +224,10 @@ where
     G::Scalar: PrimeFieldBits,
     S: SourceBuilder<<G as PrimeCurve>::Affine>,
 {
+    let skips = &AtomicUsize::new(0);
+    let chunks = &AtomicUsize::new(0);
+    let zeros = &AtomicUsize::new(0);
+    let ones = &AtomicUsize::new(0);
     // Perform this region of the multiexp
     let this = move |bases: S,
                      density_map: D,
@@ -238,12 +246,21 @@ where
         // only the first round uses this
         let handle_trivial = chunk == 0;
 
+        let mut local_skips = 0;
+        let mut local_chunks = 0;
+        let mut local_zeros = 0;
+        let mut local_ones = 0;
+
         // Sort the bases into buckets
         for (exp, density) in exponents.iter().zip(density_map.as_ref().iter()) {
             if density {
                 match exp {
-                    ChunkedExponent::Zero => bases.skip(1)?,
+                    ChunkedExponent::Zero => {
+                        local_zeros += 1;
+                        bases.skip(1)?;
+                    }
                     ChunkedExponent::One => {
+                        local_ones += 1;
                         if handle_trivial {
                             acc.add_assign_from_source(&mut bases)?;
                         } else {
@@ -251,6 +268,7 @@ where
                         }
                     }
                     ChunkedExponent::Chunks(chunks) => {
+                        local_chunks += 1;
                         let exp = chunks[chunk];
 
                         if exp != 0 {
@@ -261,8 +279,14 @@ where
                         }
                     }
                 }
+            } else {
+                local_skips += 1;
             }
         }
+        skips.fetch_add(local_skips, SeqCst);
+        ones.fetch_add(local_ones, SeqCst);
+        zeros.fetch_add(local_zeros, SeqCst);
+        chunks.fetch_add(local_chunks, SeqCst);
 
         // Summation by parts
         // e.g. 3a + 2b + 1c = a +
@@ -292,12 +316,35 @@ where
         .map(|(chunk, _)| this(bases.clone(), density_map.clone(), exponents.clone(), chunk))
         .collect::<Vec<Result<_, _>>>();
 
-    parts
+    let res = parts
         .into_iter()
         .rev()
         .try_fold(G::identity(), |acc, part| {
             part.map(|part| (0..c).fold(acc, |acc, _| acc.double()) + part)
-        })
+        });
+
+    let net_inner_loop_iters = 
+        chunks.load(SeqCst) +
+        skips.load(SeqCst) +
+        zeros.load(SeqCst) +
+        ones.load(SeqCst);
+    let pct_chunks = chunks.load(SeqCst) as f64 / net_inner_loop_iters as f64 * 1e2;
+    let pct_skips = skips.load(SeqCst) as f64 / net_inner_loop_iters as f64 * 1e2;
+    let pct_zeros = zeros.load(SeqCst) as f64 / net_inner_loop_iters as f64 * 1e2;
+    let pct_ones = ones.load(SeqCst) as f64 / net_inner_loop_iters as f64 * 1e2;
+
+    timing_log!(|| format!(
+        "MSM size {:>8}, c {:>2}, buckets {:>6}, inner iters {:>8}, chunks {:>5.1}%, skips {:>5.1}%, zeros {:>5.1}%, ones {:>5.1}%",
+        exponents.len(),
+        c,
+        (1 << c) - 1,
+        net_inner_loop_iters,
+        pct_chunks,
+        pct_skips,
+        pct_zeros,
+        pct_ones,
+    ));
+    res
 }
 
 /// Perform multi-exponentiation. The caller is responsible for ensuring the
