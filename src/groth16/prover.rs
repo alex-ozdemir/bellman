@@ -55,7 +55,8 @@ fn eval<S: PrimeField>(
     acc
 }
 
-struct ProvingAssignment<S: PrimeField> {
+/// ProvingAssignment
+pub struct ProvingAssignment<S: PrimeField> {
     // Density of queries
     a_aux_density: DensityTracker,
     b_input_density: DensityTracker,

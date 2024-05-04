@@ -160,7 +160,7 @@ use std::fmt;
 use std::io;
 use std::marker::PhantomData;
 use std::ops::{Add, Sub};
-
+use serde::{Deserialize, Serialize};
 /// Computations are expressed in terms of arithmetic circuits, in particular
 /// rank-1 quadratic constraint systems. The `Circuit` trait represents a
 /// circuit that can be synthesized. The `synthesize` method is called during
@@ -171,7 +171,7 @@ pub trait Circuit<Scalar: PrimeField> {
 }
 
 /// Represents a variable in our constraint system.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct Variable(Index);
 
 impl Variable {
@@ -190,15 +190,25 @@ impl Variable {
 
 /// Represents the index of either an input variable or
 /// auxiliary variable.
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub enum Index {
     Input(usize),
     Aux(usize),
 }
 
+/// Define a public variable in the constraint system
+pub fn define_pub_var(index: usize) -> Variable {
+    Variable::new_unchecked(Index::Input(index))
+}
+
+/// Define a private variable in the constraint system
+pub fn define_pri_var(index: usize) -> Variable {
+    Variable::new_unchecked(Index::Aux(index))
+}
+
 /// This represents a linear combination of some variables, with coefficients
 /// in the scalar field of a pairing-friendly elliptic curve group.
-#[derive(Clone)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LinearCombination<Scalar: PrimeField>(Vec<(Variable, Scalar)>);
 
 impl<Scalar: PrimeField> AsRef<[(Variable, Scalar)]> for LinearCombination<Scalar> {

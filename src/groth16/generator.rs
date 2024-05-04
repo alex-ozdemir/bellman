@@ -40,7 +40,7 @@ where
 
 /// This is our assembly structure that we'll use to synthesize the
 /// circuit into a QAP.
-struct KeypairAssembly<Scalar: PrimeField> {
+pub struct KeypairAssembly<Scalar: PrimeField> {
     num_inputs: usize,
     num_aux: usize,
     num_constraints: usize,
