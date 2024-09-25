@@ -19,12 +19,12 @@ use crate::domain::{EvaluationDomain, Scalar};
 use crate::multiexp::{multiexp, DensityTracker, FullDensity};
 
 use crate::multicore::Worker;
-use crate::{start_timer, end_timer, timing_log};
+use crate::{end_timer, start_timer, timing_log};
 
 fn eval<S: PrimeField>(
     lc: &LinearCombination<S>,
-    mut input_density: Option<&mut DensityTracker>,
-    mut aux_density: Option<&mut DensityTracker>,
+    input_density: Option<&DensityTracker>,
+    aux_density: Option<&DensityTracker>,
     input_assignment: &[S],
     aux_assignment: &[S],
 ) -> S {
@@ -37,13 +37,13 @@ fn eval<S: PrimeField>(
             match index {
                 Variable(Index::Input(i)) => {
                     tmp = input_assignment[i];
-                    if let Some(ref mut v) = input_density {
+                    if let Some(ref v) = input_density {
                         v.inc(i);
                     }
                 }
                 Variable(Index::Aux(i)) => {
                     tmp = aux_assignment[i];
-                    if let Some(ref mut v) = aux_density {
+                    if let Some(ref v) = aux_density {
                         v.inc(i);
                     }
                 }
@@ -162,6 +162,66 @@ impl<'p, E: Engine, P: ParameterSource<E> + 'p> ConstraintSystem<E::Fr>
             &self.input_assignment,
             &self.aux_assignment,
         )));
+    }
+    fn enforce_many(
+        &mut self,
+        constraints: Vec<(
+            String,
+            LinearCombination<E::Fr>,
+            LinearCombination<E::Fr>,
+            LinearCombination<E::Fr>,
+        )>,
+    ) {
+        let worker = Worker::new();
+        let n = constraints.len();
+        let mut a_evals: Vec<Scalar<E::Fr>> = vec![Scalar(E::Fr::zero()); n];
+        let mut b_evals: Vec<Scalar<E::Fr>> = vec![Scalar(E::Fr::zero()); n];
+        let mut c_evals: Vec<Scalar<E::Fr>> = vec![Scalar(E::Fr::zero()); n];
+        worker.scope(n, |scope, chunk_size| {
+            for (((constraints_chunk, a_evals_chunk), b_evals_chunk), c_evals_chunk) in constraints
+                .chunks(chunk_size)
+                .zip(a_evals.chunks_mut(chunk_size))
+                .zip(b_evals.chunks_mut(chunk_size))
+                .zip(c_evals.chunks_mut(chunk_size))
+            {
+                assert_eq!(constraints_chunk.len(), a_evals_chunk.len());
+                assert_eq!(constraints_chunk.len(), b_evals_chunk.len());
+                assert_eq!(constraints_chunk.len(), c_evals_chunk.len());
+                scope.spawn(|_scope| {
+                    for i in 0..constraints_chunk.len() {
+                        let (_ann, ref a, ref b, ref c) = &constraints_chunk[i];
+                        // See [Self::enforce].
+                        let a_eval = Scalar(eval(
+                            a,
+                            None,
+                            Some(&self.a_aux_density),
+                            &self.input_assignment,
+                            &self.aux_assignment,
+                        ));
+                        let b_eval = Scalar(eval(
+                            &b,
+                            Some(&self.b_input_density),
+                            Some(&self.b_aux_density),
+                            &self.input_assignment,
+                            &self.aux_assignment,
+                        ));
+                        let c_eval = Scalar(eval(
+                            &c,
+                            None,
+                            None,
+                            &self.input_assignment,
+                            &self.aux_assignment,
+                        ));
+                        a_evals_chunk[i] = a_eval;
+                        b_evals_chunk[i] = b_eval;
+                        c_evals_chunk[i] = c_eval;
+                    }
+                });
+            }
+        });
+        self.a.extend(a_evals);
+        self.b.extend(b_evals);
+        self.c.extend(c_evals);
     }
 
     fn push_namespace<NR, N>(&mut self, _: N)

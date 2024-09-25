@@ -421,6 +421,21 @@ pub trait ConstraintSystem<Scalar: PrimeField>: Sized {
         LB: FnOnce(LinearCombination<Scalar>) -> LinearCombination<Scalar>,
         LC: FnOnce(LinearCombination<Scalar>) -> LinearCombination<Scalar>;
 
+    /// Batch enforcement. See [Self::enforce].
+    fn enforce_many(
+        &mut self,
+        contraints: Vec<(
+            String,
+            LinearCombination<Scalar>,
+            LinearCombination<Scalar>,
+            LinearCombination<Scalar>,
+        )>,
+    ) {
+        for (a, la, lb, lc) in contraints.into_iter() {
+            self.enforce(|| a, |_| la, |_| lb, |_| lc)
+        }
+    }
+
     /// Create a new (sub)namespace and enter into it. Not intended
     /// for downstream use; use `namespace` instead.
     fn push_namespace<NR, N>(&mut self, name_fn: N)

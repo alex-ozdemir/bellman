@@ -119,7 +119,7 @@ impl<'a> QueryDensity for &'a FullDensity {
 }
 
 pub struct DensityTracker {
-    bv: BitVec,
+    bv: BitVec<std::sync::atomic::AtomicUsize>,
 }
 
 impl<'a> QueryDensity for &'a DensityTracker {
@@ -149,9 +149,9 @@ impl DensityTracker {
         self.bv.push(false);
     }
 
-    pub fn inc(&mut self, idx: usize) {
+    pub fn inc(&self, idx: usize) {
         if !self.bv.get(idx).unwrap() {
-            self.bv.set(idx, true);
+            self.bv.set_aliased(idx, true);
         }
     }
 
