@@ -166,10 +166,10 @@ impl<'p, E: Engine, P: ParameterSource<E> + 'p> ConstraintSystem<E::Fr>
     fn enforce_many(
         &mut self,
         constraints: Vec<(
-            String,
-            LinearCombination<E::Fr>,
-            LinearCombination<E::Fr>,
-            LinearCombination<E::Fr>,
+            &str,
+            &LinearCombination<E::Fr>,
+            &LinearCombination<E::Fr>,
+            &LinearCombination<E::Fr>,
         )>,
     ) {
         let worker = Worker::new();

@@ -435,14 +435,14 @@ pub trait ConstraintSystem<Scalar: PrimeField>: Sized {
     fn enforce_many(
         &mut self,
         contraints: Vec<(
-            String,
-            LinearCombination<Scalar>,
-            LinearCombination<Scalar>,
-            LinearCombination<Scalar>,
+            &str,
+            &LinearCombination<Scalar>,
+            &LinearCombination<Scalar>,
+            &LinearCombination<Scalar>,
         )>,
     ) {
         for (a, la, lb, lc) in contraints.into_iter() {
-            self.enforce(|| a, |_| la, |_| lb, |_| lc)
+            self.enforce(|| a.to_string(), |_| la.clone(), |_| lb.clone(), |_| lc.clone())
         }
     }
 
