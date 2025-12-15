@@ -15,7 +15,7 @@ use blake2s_simd::{Params as Blake2sParams, State as Blake2sState};
 
 #[derive(Debug)]
 enum NamedObject {
-    Constraint(usize),
+    Constraint(),
     Var(Variable),
     Namespace,
 }
@@ -395,8 +395,7 @@ impl<Scalar: PrimeField> ConstraintSystem<Scalar> for TestConstraintSystem<Scala
         LC: FnOnce(LinearCombination<Scalar>) -> LinearCombination<Scalar>,
     {
         let path = compute_path(&self.current_namespace, annotation().into());
-        let index = self.constraints.len();
-        self.set_named_obj(path.clone(), NamedObject::Constraint(index));
+        self.set_named_obj(path.clone(), NamedObject::Constraint());
 
         let a = a(LinearCombination::zero());
         let b = b(LinearCombination::zero());

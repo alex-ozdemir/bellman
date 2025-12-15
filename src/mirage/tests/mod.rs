@@ -290,7 +290,7 @@ fn test_xordemo() {
     let r = Fr::from(27134);
     let s = Fr::from(17146);
 
-    let proof = {
+    let (proof, _aux_blocks) = {
         let c = XorDemo {
             a: Some(true),
             b: Some(false),
@@ -446,7 +446,7 @@ fn zero_coeff_test(one_var: bool) {
             .unwrap();
     let r = Fr::from(27134);
     let s = Fr::from(17146);
-    let pf = create_proof(&m, &pk, r, s, vec![]).unwrap();
+    let (pf, _aux_blocks) = create_proof(&m, &pk, r, s, vec![]).unwrap();
     let pvk = prepare_verifying_key(&pk.vk);
     verify_proof(&pvk, &pf, &[]).unwrap();
 }
@@ -543,7 +543,7 @@ fn coin1() {
     let r = Fr::from(27134);
     let s = Fr::from(17146);
     let k = vec![Fr::from(1)];
-    let pf = create_proof(&m, &pk, r, s, k).unwrap();
+    let (pf, _aux_blocks) = create_proof(&m, &pk, r, s, k).unwrap();
     let pvk = prepare_verifying_key(&pk.vk);
     verify_proof(&pvk, &pf, &[]).unwrap();
 }
@@ -633,7 +633,7 @@ fn test_3blocks_2coins() {
     let r = Fr::from(27134);
     let s = Fr::from(17146);
     let k = vec![Fr::from(1), Fr::from(15), Fr::from(5)];
-    let pf = create_proof(&m, &pk, r, s, k).unwrap();
+    let (pf, _aux_blocks) = create_proof(&m, &pk, r, s, k).unwrap();
     let pvk = prepare_verifying_key(&pk.vk);
     verify_proof(&pvk, &pf, &[Fr::from(1)]).unwrap();
 }

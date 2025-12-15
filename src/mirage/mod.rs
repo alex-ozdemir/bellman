@@ -649,7 +649,7 @@ mod test_with_bls12_381 {
             let mut c = a;
             c.mul_assign(&b);
 
-            let proof = create_random_proof(
+            let (proof, _aux_blocks) = create_random_proof(
                 MySillyCircuit {
                     a: Some(a),
                     b: Some(b),
@@ -658,6 +658,8 @@ mod test_with_bls12_381 {
                 &mut rng,
             )
             .unwrap();
+            // ignore the aux blocks; we don't want to link them to a public commitment
+
 
             let mut v = vec![];
             proof.write(&mut v).unwrap();

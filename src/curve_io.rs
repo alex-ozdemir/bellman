@@ -1,4 +1,5 @@
 //! IO utilities
+#![allow(dead_code)]
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use group::{prime::PrimeCurveAffine, GroupEncoding, UncompressedEncoding};
