@@ -545,7 +545,7 @@ impl<'a, Scalar: PrimeField, CS: ConstraintSystem<Scalar>> Drop for Namespace<'a
     }
 }
 
-/// Convenience implementation of ConstraintSystem<Scalar> for mutable references to
+/// Convenience implementation of `ConstraintSystem<Scalar>` for mutable references to
 /// constraint systems.
 impl<'cs, Scalar: PrimeField, CS: ConstraintSystem<Scalar>> ConstraintSystem<Scalar>
     for &'cs mut CS

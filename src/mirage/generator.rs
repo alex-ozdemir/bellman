@@ -1,3 +1,4 @@
+//! Setup/key generation
 use rand_core::RngCore;
 use std::ops::{AddAssign, MulAssign};
 use std::sync::Arc;
@@ -15,8 +16,11 @@ use crate::domain::{EvaluationDomain, Scalar};
 
 use crate::multicore::Worker;
 
-/// Generates a random common reference string for
-/// a circuit.
+/// Generates a random common reference string for a circuit.
+///
+/// The output parameters can be used to create and verify proofs.
+/// They also contain commitment generators for each aux block (see
+/// [super::Parameters] to learn where those generators are).
 pub fn generate_random_parameters<E, C, R>(
     circuit: C,
     mut rng: &mut R,

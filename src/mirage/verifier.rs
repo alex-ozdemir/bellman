@@ -1,3 +1,4 @@
+//! Verifying
 use ff::{Field, PrimeField};
 use group::{prime::PrimeCurveAffine, Curve, UncompressedEncoding};
 use merlin::Transcript;
@@ -8,6 +9,7 @@ use super::{merlin_rng, PreparedVerifyingKey, Proof, VerifyingKey};
 
 use crate::VerificationError;
 
+/// Preprocessing on a verifying key to make verification faster.
 pub fn prepare_verifying_key<E: MultiMillerLoop>(vk: &VerifyingKey<E>) -> PreparedVerifyingKey<E> {
     let gamma = vk.gamma_g2.neg();
     let neg_deltas_g2: Vec<E::G2Prepared> = vk.deltas_g2.iter().map(|d| d.neg().into()).collect();
@@ -21,6 +23,11 @@ pub fn prepare_verifying_key<E: MultiMillerLoop>(vk: &VerifyingKey<E>) -> Prepar
     }
 }
 
+/// Verify a Mirage proof given a prepared verifying key and public inputs.
+///
+/// Note that this also verifies that the proof is respect to a witness whose
+/// aux blocks are committed to as the commitments stored in `proof` (see
+/// [super::Proof] for where those commitments are).
 pub fn verify_proof<'a, E: MultiMillerLoop>(
     pvk: &'a PreparedVerifyingKey<E>,
     proof: &Proof<E>,

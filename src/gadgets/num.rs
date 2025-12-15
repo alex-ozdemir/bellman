@@ -365,6 +365,7 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
     }
 }
 
+#[derive(Clone)]
 pub struct Num<Scalar: PrimeField> {
     value: Option<Scalar>,
     lc: LinearCombination<Scalar>,
@@ -380,6 +381,10 @@ impl<Scalar: PrimeField> From<AllocatedNum<Scalar>> for Num<Scalar> {
 }
 
 impl<Scalar: PrimeField> Num<Scalar> {
+    pub fn new(value: Option<Scalar>, lc: LinearCombination<Scalar>) -> Self {
+        Num { value, lc }
+    }
+
     pub fn zero() -> Self {
         Num {
             value: Some(Scalar::zero()),
@@ -411,6 +416,32 @@ impl<Scalar: PrimeField> Num<Scalar> {
             value: newval,
             lc: self.lc + &bit.lc(one, coeff),
         }
+    }
+
+    pub fn sub(self, other: &Self) -> Self {
+        let newval = self.value.and_then(|s| other.value.map(|o| s - o));
+
+        Num {
+            value: newval,
+            lc: self.lc - &other.lc,
+        }
+    }
+    pub fn mul<CS>(&self, mut cs: CS, other: &Self) -> Result<AllocatedNum<Scalar>, SynthesisError>
+    where
+        CS: ConstraintSystem<Scalar>,
+    {
+        let newval = self.value.and_then(|s| other.value.map(|o| s * o));
+
+        let out = AllocatedNum::alloc(cs.namespace(|| "mul"), || {
+            newval.ok_or(SynthesisError::AssignmentMissing)
+        })?;
+        cs.enforce(
+            || "mul",
+            |_| self.lc.clone(),
+            |_| other.lc.clone(),
+            |lc| lc + out.variable,
+        );
+        Ok(out)
     }
 }
 

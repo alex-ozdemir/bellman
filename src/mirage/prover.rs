@@ -1,3 +1,4 @@
+//! Proving
 use rand_core::RngCore;
 use std::ops::{AddAssign, MulAssign};
 use std::sync::Arc;
@@ -300,6 +301,12 @@ where
     }
 }
 
+/// Create a random proof for the given circuit and parameters,
+/// using the provided RNG to sample the proof randomness.
+///
+/// The proof contains commitments to the aux blocks. See [super::Proof] for
+/// information about where those commitments are, and see [super::Parameters]
+/// for information about the commitment generators.
 pub fn create_random_proof<E, C, R, P: ParameterSource<E>>(
     circuit: C,
     params: P,
@@ -319,6 +326,8 @@ where
     create_proof::<E, C, P>(circuit, params, r, s, kappa_3s)
 }
 
+/// Create a proof with fixed "randomness". See [create_random_proof] for more
+/// details.
 #[allow(clippy::many_single_char_names)]
 pub fn create_proof<E, C, P: ParameterSource<E>>(
     circuit: C,

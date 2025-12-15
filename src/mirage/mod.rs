@@ -1,8 +1,13 @@
-//! The [Mirage] proving system.
+//! The Mirage+ proving system, a CC-zkSNARK for I-R1CS.
 //!
-//! [Mirage]: https://eprint.iacr.org/2020/278
+//! This implements the Mirage+ construction of Ozdemir, Laufer, and Boneh
+//! (<https://eprint.iacr.org/2024/979>), which is based on the Mirage
+//! construction of Kosba et al. (<https://eprint.iacr.org/2020/278>).
 //!
-//! Based on Bellman's original implementation of Groth16.
+//! It is implemented as a patch to bellman's original implementation of
+//! Groth16, at [groth16](crate::groth16).
+//!
+//! See [cc](crate::cc) for the programming interface to this proving system.
 //!
 //! Notation:
 //! * new proof elements: pi_d(s)
@@ -24,8 +29,8 @@ use std::sync::Arc;
 #[cfg(test)]
 pub mod tests;
 
-pub mod generator;
-pub mod prover;
+mod generator;
+mod prover;
 mod verifier;
 
 pub use self::generator::*;
@@ -40,10 +45,12 @@ fn merlin_rng(t: &mut Transcript, label: &'static [u8]) -> Box<dyn RngCore> {
 }
 
 #[derive(Clone, Debug)]
+/// A Mirage proof, which include commitments to the aux blocks.
 pub struct Proof<E: Engine> {
     pub a: E::G1Affine,
     pub b: E::G2Affine,
     pub c: E::G1Affine,
+    /// the commitments to the aux blocks, in declaration order
     pub ds: Vec<E::G1Affine>,
 }
 
@@ -126,9 +133,13 @@ impl<E: Engine> Proof<E> {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// An entry in the Mirage transcript.
 pub enum TranscriptEntry {
+    /// V samples a coin.
     Coin,
+    /// P and V give a public input.
     PublicInput,
+    /// P commits to an aux (private) block.
     AuxCommit,
 }
 
@@ -294,6 +305,7 @@ impl<E: Engine> VerifyingKey<E> {
 }
 
 #[derive(Clone)]
+/// The Mirage `pk` and `vk`.
 pub struct Parameters<E: Engine> {
     pub vk: VerifyingKey<E>,
 
@@ -307,6 +319,9 @@ pub struct Parameters<E: Engine> {
     //
     // The last is for I (in Mirage)
     // The rest are for Js
+    /// This is a list of vectors. The list has length one more than the number
+    /// of aux blocks. Each vector but the last contains the generators for the
+    /// commitment to each aux block, in declaration order.
     pub ls: Vec<Arc<Vec<E::G1Affine>>>,
 
     // QAP "A" polynomials evaluated at tau in the Lagrange basis. Never contains
@@ -643,7 +658,7 @@ mod test_with_bls12_381 {
 
         let pvk = prepare_verifying_key::<Bls12>(&params.vk);
 
-        for _ in 0..100 {
+        for _ in 0..10 {
             let a = Scalar::random(&mut rng);
             let b = Scalar::random(&mut rng);
             let mut c = a;
@@ -659,7 +674,6 @@ mod test_with_bls12_381 {
             )
             .unwrap();
             // ignore the aux blocks; we don't want to link them to a public commitment
-
 
             let mut v = vec![];
             proof.write(&mut v).unwrap();

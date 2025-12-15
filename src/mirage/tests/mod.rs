@@ -7,7 +7,7 @@ use std::marker::PhantomData;
 use std::ops::{AddAssign, MulAssign, SubAssign};
 
 use crate::cc::{CcCircuit, CcConstraintSystem};
-use crate::SynthesisError;
+use crate::{LinearCombination, SynthesisError};
 
 use super::{create_proof, generate_parameters, prepare_verifying_key, verify_proof};
 
@@ -462,17 +462,24 @@ fn zero_coeff_non_one_var() {
 }
 
 #[test]
-fn coin1() {
-    struct Coin1<F> {
+/// This test creates a circuit that verifies that two vectors `a` and `b` are equal up to reordering.
+///
+/// It does this by defining two polynomials `A(x) = prod (x - a_i)` and `B(x) = prod (x - b_i)`
+/// and enforcing that `A(k) = B(k)` for a random `k`.
+fn permutation_arg_one_block_one_coin() {
+    // The circuit structure.
+    struct Permutations<F> {
         a: Vec<Option<F>>,
         b: Vec<Option<F>>,
     }
 
-    impl<F: ff::PrimeField> CcCircuit<F> for &Coin1<F> {
+    // The circuit implementation.
+    impl<F: ff::PrimeField> CcCircuit<F> for &Permutations<F> {
         fn synthesize<CS: CcConstraintSystem<F>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-            use crate::gadgets::num::AllocatedNum;
+            use crate::gadgets::num::{AllocatedNum, Num};
             use crate::gadgets::Assignment;
-            let as_ = self
+            // allocate the (private) inputs a
+            let as_: Vec<Num<F>> = self
                 .a
                 .iter()
                 .enumerate()
@@ -480,9 +487,11 @@ fn coin1() {
                     AllocatedNum::alloc(cs.namespace(|| format!("a{}", i)), || {
                         a.get().map(Clone::clone)
                     })
+                    .map(Num::from)
                 })
-                .collect::<Result<Vec<_>, _>>()?;
-            let bs_ = self
+                .collect::<Result<Vec<Num<F>>, _>>()?;
+            // allocate the (private) inputs b
+            let bs_: Vec<Num<F>> = self
                 .b
                 .iter()
                 .enumerate()
@@ -490,25 +499,33 @@ fn coin1() {
                     AllocatedNum::alloc(cs.namespace(|| format!("b{}", i)), || {
                         b.get().map(Clone::clone)
                     })
+                    .map(Num::from)
                 })
                 .collect::<Result<Vec<_>, _>>()?;
+            // end the first aux block, which commits to it.
             cs.end_aux_block(|| "perms")?;
+            // ask for a challenge, independent of the block.
             let (k, val_k) = cs.alloc_random(|| "k")?;
-            let k = AllocatedNum {
+            // wrap it in an AllocatedNum for convenience.
+            let k = Num::from(AllocatedNum {
                 variable: k,
                 value: val_k,
-            };
-            let ak = as_
-                .into_iter()
-                .try_fold(k.clone(), |k, a| k.mul(cs.namespace(|| "mul"), &a))?;
-            let bk = bs_
-                .into_iter()
-                .try_fold(k, |k, b| k.mul(cs.namespace(|| "mul"), &b))?;
+            });
+            let one = Num::new(Some(F::one()), LinearCombination::zero() + CS::one());
+            // evaluate A(k)
+            let ak = as_.into_iter().try_fold(one.clone(), |acc, a_i| {
+                acc.mul(cs.namespace(|| "mul"), &a_i.sub(&k)).map(Num::from)
+            })?;
+            // and B(k)
+            let bk = bs_.into_iter().try_fold(one.clone(), |acc, b_i| {
+                acc.mul(cs.namespace(|| "mul"), &b_i.sub(&k)).map(Num::from)
+            })?;
+            // and enforce equality.
             cs.enforce(
                 || "eq",
                 |lc| lc,
                 |lc| lc,
-                |lc| lc + ak.get_variable() - bk.get_variable(),
+                |lc| lc + &ak.lc(F::one()) - &bk.lc(F::one()),
             );
             Ok(())
         }
@@ -517,10 +534,13 @@ fn coin1() {
             1
         }
     }
-    let m = Coin1 {
-        a: vec![Some(Fr::from(5)), Some(Fr::from(6))],
-        b: vec![Some(Fr::from(10)), Some(Fr::from(3))],
+    let m = Permutations {
+        // notice that these vectors are a permuation pair
+        a: vec![Some(Fr::from(5)), Some(Fr::from(6)), Some(Fr::from(3))],
+        b: vec![Some(Fr::from(6)), Some(Fr::from(3)), Some(Fr::from(5))],
     };
+
+    // fix all the setup randomness
     let g1 = Fr::one();
     let g2 = Fr::one();
     let alpha = Fr::from(48577);
@@ -529,6 +549,8 @@ fn coin1() {
     let delta = Fr::from(5481);
     let delta2 = Fr::from(5482);
     let tau = Fr::from(3673);
+
+    // setup
     let pk = generate_parameters::<DummyEngine, _>(
         &m,
         g1,
@@ -540,10 +562,16 @@ fn coin1() {
         tau,
     )
     .unwrap();
+
+    // fix all the prove randomness
     let r = Fr::from(27134);
     let s = Fr::from(17146);
     let k = vec![Fr::from(1)];
+
+    // create the proof and discard the aux blocks
     let (pf, _aux_blocks) = create_proof(&m, &pk, r, s, k).unwrap();
+
+    // verify the permutation proof
     let pvk = prepare_verifying_key(&pk.vk);
     verify_proof(&pvk, &pf, &[]).unwrap();
 }

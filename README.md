@@ -25,6 +25,16 @@ Licensed under either of
 
 at your option.
 
+## Mirage+
+
+This particular branch of bellman implements Mirage+, a commit-carrying zkSNARK
+for interactive proofs. See:
+
+* the [`crate::cc`](./src/mirage/mod.rs) module for the programming interface
+* the [`crate::mirage`](./src/lib/mirage/mod.rs) module for the proof system
+* the `permutation_arg_one_block_one_coin` unit test for an example of a zkSNARK
+   for IPs
+
 ### Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally
