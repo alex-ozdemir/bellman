@@ -517,7 +517,7 @@ pub struct PreparedVerifyingKey<E: MultiMillerLoop> {
     /// -deltas in G2
     neg_deltas_g2: Vec<E::G2Prepared>,
     /// Copy of IC from `VerifiyingKey`.
-    ic: Vec<E::G1Affine>,
+    ic: Arc<Vec<E::G1Affine>>,
     /// Transcript
     pub transcript: Vec<TranscriptEntry>,
 }

@@ -1,12 +1,15 @@
 //! Verifying
-use ff::{Field, PrimeField};
+use ff::{Field, PrimeField, PrimeFieldBits};
 use group::{prime::PrimeCurveAffine, Curve, UncompressedEncoding};
 use merlin::Transcript;
 use pairing::{MillerLoopResult, MultiMillerLoop};
-use std::ops::{AddAssign, Neg};
+use std::ops::Neg;
+use std::sync::Arc;
 
 use super::{merlin_rng, PreparedVerifyingKey, Proof, VerifyingKey};
 
+use crate::multicore::Worker;
+use crate::multiexp::{multiexp, Exponent, FullDensity};
 use crate::VerificationError;
 
 /// Preprocessing on a verifying key to make verification faster.
@@ -18,7 +21,7 @@ pub fn prepare_verifying_key<E: MultiMillerLoop>(vk: &VerifyingKey<E>) -> Prepar
         alpha_g1_beta_g2: E::pairing(&vk.alpha_g1, &vk.beta_g2),
         neg_gamma_g2: gamma.into(),
         neg_deltas_g2,
-        ic: vk.ic.clone(),
+        ic: Arc::new(vk.ic.clone()),
         transcript: vk.transcript.clone(),
     }
 }
@@ -32,11 +35,18 @@ pub fn verify_proof<'a, E: MultiMillerLoop>(
     pvk: &'a PreparedVerifyingKey<E>,
     proof: &Proof<E>,
     public_inputs: &[E::Fr],
-) -> Result<(), VerificationError> {
+) -> Result<(), VerificationError>
+where
+    E::Fr: PrimeFieldBits,
+{
     let mut transcript = Transcript::new(b"mirage_aozdemir_1");
-    let mut acc = pvk.ic[0].to_curve();
     transcript.append_message(b"input", E::Fr::from(1).to_repr().as_ref());
 
+    // Walk the transcript sequentially to (a) derive Fiat-Shamir coins, which
+    // depend on previously-appended inputs, and (b) collect the scalars that
+    // multiply pvk.ic[1..]. The actual linear combination is deferred to a
+    // single multiexp below.
+    let mut scalars: Vec<Exponent<E::Fr>> = Vec::with_capacity(pvk.ic.len() - 1);
     let mut public_inputs_i = 0;
     let mut aux_commits_i = 0;
     let mut i = 1;
@@ -46,14 +56,11 @@ pub fn verify_proof<'a, E: MultiMillerLoop>(
                 let mut rng = merlin_rng(&mut transcript, b"random");
                 let coin = E::Fr::random(&mut *rng);
                 transcript.append_message(b"input", coin.to_repr().as_ref());
-                AddAssign::<&E::G1>::add_assign(&mut acc, &(pvk.ic[i] * coin));
+                scalars.push(Exponent::from(coin));
                 i += 1;
             }
             crate::mirage::TranscriptEntry::PublicInput => {
-                AddAssign::<&E::G1>::add_assign(
-                    &mut acc,
-                    &(pvk.ic[i] * public_inputs[public_inputs_i]),
-                );
+                scalars.push(Exponent::from(&public_inputs[public_inputs_i]));
                 transcript
                     .append_message(b"input", public_inputs[public_inputs_i].to_repr().as_ref());
                 public_inputs_i += 1;
@@ -70,6 +77,23 @@ pub fn verify_proof<'a, E: MultiMillerLoop>(
     }
     if i != pvk.ic.len() || aux_commits_i != proof.ds.len() {
         return Err(VerificationError::InvalidVerifyingKey);
+    }
+
+    // acc = ic[0] + sum_{j>=1} ic[j] * scalar_{j-1}. The bases ic[1..] line up
+    // contiguously with `scalars` (in transcript order), so the sum is a single
+    // multiexp; ic[0] (the constant "one" input) is added separately.
+    let mut acc = pvk.ic[0].to_curve();
+    if !scalars.is_empty() {
+        let worker = Worker::new();
+        let combination: E::G1 = multiexp(
+            &worker,
+            (pvk.ic.clone(), 1),
+            FullDensity,
+            Arc::new(scalars),
+        )
+        .wait()
+        .map_err(|_| VerificationError::InvalidVerifyingKey)?;
+        acc += &combination;
     }
 
     // The original verification equation is:
